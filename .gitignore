@@ -1,0 +1,23 @@
+# Environment & OS
+.env
+.vscode/
+__pycache__/
+*.pyc
+.DS_Store
+
+# Python virtual envs
+.venv/
+.venv311/
+
+# Node
+node_modules/
+frontend/dist/
+
+# Data & database
+data/
+*.db
+*.sqlite*
+
+# Build / cache
+*.log
+__pypackages__/
