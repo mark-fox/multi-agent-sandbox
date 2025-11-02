@@ -23,6 +23,22 @@ function RoomsView({ onOpen }: { onOpen: (room: Room) => void }) {
     load();
   }, []);
 
+  async function buildScenario(scenario: string) {
+    setLoading(true);
+    setErr(null);
+    try {
+      const result = await api<any>(`/rooms/build/${scenario}`, {
+        method: "POST",
+      });
+      const room = result.room;
+      setRooms((r) => [room, ...r]);
+    } catch (e: any) {
+      setErr(e.message ?? String(e));
+    } finally {
+      setLoading(false);
+    }
+  }
+
   async function createRoom() {
     if (!name.trim()) return;
     setLoading(true);
@@ -80,6 +96,21 @@ function RoomsView({ onOpen }: { onOpen: (room: Room) => void }) {
             {loading ? "Creating..." : "Create"}
           </button>
         </div>
+        <div style={{ marginTop: 12 }}>
+          <strong>Quick Scenarios:</strong>
+          <div
+            style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 6 }}
+          >
+            <button onClick={() => buildScenario("debate")}>Debate</button>
+            <button onClick={() => buildScenario("startup_planning")}>
+              Startup Planning
+            </button>
+            <button onClick={() => buildScenario("story_writing")}>
+              Story Writing
+            </button>
+          </div>
+        </div>
+
         {err && <div style={{ color: "crimson", marginTop: 8 }}>{err}</div>}
       </div>
 

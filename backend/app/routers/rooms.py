@@ -4,6 +4,7 @@ from sqlmodel import Session, select
 from datetime import datetime
 from app.db import engine
 from app.models import Room, RoomCreate, Agent, Message
+from app.scenarios import SCENARIOS
 
 router = APIRouter(prefix="/rooms", tags=["rooms"])
 
@@ -66,3 +67,27 @@ def export_room_markdown(room_id: int):
         filename = f"{room.name.replace(' ', '_')}_transcript.md"
         headers = {"Content-Disposition": f'attachment; filename="{filename}"'}
         return Response(content=md, media_type="text/markdown; charset=utf-8", headers=headers)
+    
+@router.post("/build/{scenario_key}")
+def build_scenario_room(scenario_key: str):
+    """Create a new room with predefined agents from a scenario template."""
+    scenario = SCENARIOS.get(scenario_key)
+    if not scenario:
+        raise HTTPException(status_code=404, detail="Scenario not found")
+
+    with Session(engine) as session:
+        room = Room(name=scenario_key.replace("_", " ").title(), scenario=scenario_key)
+        session.add(room)
+        session.commit()
+        session.refresh(room)
+
+        for a in scenario["agents"]:
+            agent = Agent(room_id=room.id, name=a["name"], role=a["role"], goal=a["goal"])
+            session.add(agent)
+        session.commit()
+
+        return {
+            "room": room,
+            "agents": session.exec(select(Agent).where(Agent.room_id == room.id)).all(),
+            "description": scenario["description"],
+        }
