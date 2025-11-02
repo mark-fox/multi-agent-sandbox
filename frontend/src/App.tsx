@@ -197,6 +197,19 @@ function RoomView({ room, onBack }: { room: Room; onBack: () => void }) {
     }
   }
 
+  async function judgeTurn() {
+    setLoading(true);
+    setErr(null);
+    try {
+      await api<Message>(`/simulate/judge/${room.id}`, { method: "POST" });
+      // Poller will pick it up automatically
+    } catch (e: any) {
+      setErr(e.message ?? String(e));
+    } finally {
+      setLoading(false);
+    }
+  }
+
   async function exportMarkdown() {
     try {
       const res = await fetch(`${API_BASE}/rooms/${room.id}/export.md`, {
@@ -327,6 +340,13 @@ function RoomView({ room, onBack }: { room: Room; onBack: () => void }) {
             style={{ padding: "8px 12px" }}
           >
             {loading ? "Working..." : "Simulate Turn"}
+          </button>
+          <button
+            onClick={judgeTurn}
+            disabled={loading || messages.length === 0}
+            style={{ padding: "8px 12px" }}
+          >
+            Judge
           </button>
         </div>
         <div

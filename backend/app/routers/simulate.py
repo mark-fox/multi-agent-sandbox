@@ -49,3 +49,56 @@ async def simulate_turn(room_id: int):
         session.commit()
         session.refresh(msg)
         return msg
+
+@router.post("/judge/{room_id}")
+async def judge_turn(room_id: int):
+    """Judge the most recent turn in this room."""
+    with Session(engine) as session:
+        room = session.get(Room, room_id)
+        if not room:
+            return {"error": "Room not found"}
+
+        agents = session.exec(select(Agent).where(Agent.room_id == room_id)).all()
+        if not agents:
+            return {"error": "No agents in room"}
+
+        messages = session.exec(
+            select(Message)
+            .where(Message.room_id == room_id)
+            .order_by(Message.created_at)
+        ).all()
+
+        if len(messages) < 1:
+            return {"error": "No messages yet"}
+
+        # Context for judging (last 5 messages)
+        context = "\n".join(
+            [
+                f"{m.agent_id}:{m.content}"
+                for m in messages[-5:]
+                if m.content
+            ]
+        )
+
+        last_msg = messages[-1]
+        last_agent = next((a for a in agents if a.id == last_msg.agent_id), None)
+
+        system = (
+            "You are a neutral judge evaluating the most recent message in a discussion.\n"
+            "Your task: assess the quality, logic, or helpfulness of the last message "
+            "in the context of the conversation.\n"
+            "Output in one concise paragraph followed by a score from 1–10."
+        )
+
+        prompt = (
+            f"Conversation so far:\n{context}\n\n"
+            f"Evaluate the last message ({last_agent.name if last_agent else 'Unknown'}):"
+        )
+
+        feedback = await generate_llm(prompt, system=system)
+
+        msg = Message(room_id=room_id, agent_id=None, content=f"🧑‍⚖️ Judge: {feedback}")
+        session.add(msg)
+        session.commit()
+        session.refresh(msg)
+        return msg
