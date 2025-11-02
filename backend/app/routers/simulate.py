@@ -3,6 +3,7 @@ from sqlmodel import Session, select
 from app.db import engine
 from app.models import Room, Agent, Message
 from app.llm import generate_llm
+from app.memory import add_memory, recall_memories
 
 router = APIRouter(prefix="/simulate", tags=["simulate"])
 
@@ -19,7 +20,6 @@ async def simulate_turn(room_id: int):
         if not agents:
             return {"error": "No agents in room"}
 
-        # Last message to decide next speaker (round-robin)
         last_msg = session.exec(
             select(Message).where(Message.room_id == room_id).order_by(Message.created_at.desc())
         ).first()
@@ -33,14 +33,21 @@ async def simulate_turn(room_id: int):
         else:
             next_agent = agents[0]
 
-        # Small history context
         history = session.exec(
             select(Message).where(Message.room_id == room_id).order_by(Message.created_at)
         ).all()
         history_text = "\n".join([f"{m.agent_id}:{m.content}" for m in history[-12:]])
 
-        system = SYSTEM_TEMPLATE.format(name=next_agent.name, role=next_agent.role, goal=next_agent.goal)
-        prompt = f"Conversation so far:\n{history_text}\n\nYour turn:"
+        # Recall top relevant memories for this agent
+        recalled = recall_memories(next_agent.id, history_text, n_results=3)
+        memory_text = "\n".join(recalled) if recalled else "No relevant past memories."
+
+        system = f"You are {next_agent.name}, a {next_agent.role}. Your goal: {next_agent.goal}."
+        prompt = (
+            f"Conversation so far:\n{history_text}\n\n"
+            f"Relevant past memories:\n{memory_text}\n\n"
+            f"Your next reply:"
+        )
 
         reply = await generate_llm(prompt, system=system)
 
@@ -48,8 +55,13 @@ async def simulate_turn(room_id: int):
         session.add(msg)
         session.commit()
         session.refresh(msg)
-        return msg
 
+        # Add new message to agent's memory
+        add_memory(next_agent.id, reply)
+
+        return msg
+    
+    
 @router.post("/judge/{room_id}")
 async def judge_turn(room_id: int):
     """Judge the most recent turn in this room."""
