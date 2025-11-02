@@ -150,6 +150,7 @@ function RoomView({ room, onBack }: { room: Room; onBack: () => void }) {
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [live, setLive] = useState(true); // ⬅️ new
+  const [humanText, setHumanText] = useState("");
 
   async function refresh() {
     setErr(null);
@@ -258,6 +259,21 @@ function RoomView({ room, onBack }: { room: Room; onBack: () => void }) {
       a.click();
       a.remove();
       URL.revokeObjectURL(url);
+    } catch (e: any) {
+      alert(e.message ?? String(e));
+    }
+  }
+
+  async function sendHumanMessage() {
+    const text = humanText.trim();
+    if (!text) return;
+    setHumanText("");
+    try {
+      await api<Message>(`/messages/human/${room.id}`, {
+        method: "POST",
+        body: JSON.stringify({ content: text }),
+      });
+      // Poller will update automatically
     } catch (e: any) {
       alert(e.message ?? String(e));
     }
@@ -401,6 +417,18 @@ function RoomView({ room, onBack }: { room: Room; onBack: () => void }) {
             <div style={{ color: "#666" }}>No messages yet.</div>
           )}
         </div>
+      </div>
+      <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+        <input
+          placeholder="Type a message to join the conversation..."
+          value={humanText}
+          onChange={(e) => setHumanText(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && sendHumanMessage()}
+          style={{ flex: 1, padding: 8 }}
+        />
+        <button onClick={sendHumanMessage} style={{ padding: "8px 12px" }}>
+          Send
+        </button>
       </div>
 
       {err && <div style={{ color: "crimson", marginTop: 12 }}>{err}</div>}
