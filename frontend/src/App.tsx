@@ -96,13 +96,14 @@ function RoomView({ room, onBack }: { room: Room; onBack: () => void }) {
   });
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const [live, setLive] = useState(true); // ⬅️ new
 
   async function refresh() {
     setErr(null);
     try {
       const [a, m] = await Promise.all([
         api<Agent[]>(`/agents/${room.id}`),
-        api<Message[]>(`/messages/${room.id}`),
+        api<Message[]>(`/messages/${room.id}`)
       ]);
       setAgents(a);
       setMessages(m);
@@ -112,9 +113,35 @@ function RoomView({ room, onBack }: { room: Room; onBack: () => void }) {
   }
 
   useEffect(() => {
+    // Initial load when entering the room
     refresh();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [room.id]);
+
+  // ⬇️ Polling loop for live updates
+  useEffect(() => {
+    if (!live) return;
+
+    let stopped = false;
+
+    async function poll() {
+      try {
+        const m = await api<Message[]>(`/messages/${room.id}`);
+        if (!stopped) setMessages(m);
+      } catch {
+        // ignore transient network errors while polling
+      }
+    }
+
+    // poll immediately, then at an interval
+    poll();
+    const id = setInterval(poll, 1500);
+
+    return () => {
+      stopped = true;
+      clearInterval(id);
+    };
+  }, [room.id, live]);
 
   async function addAgent() {
     if (!draftAgent.name.trim() || !draftAgent.role.trim()) return;
@@ -137,7 +164,7 @@ function RoomView({ room, onBack }: { room: Room; onBack: () => void }) {
     setErr(null);
     try {
       await api<Message>(`/simulate/turn/${room.id}`, { method: "POST" });
-      await refresh();
+      // no need to call refresh(); the poller will pick it up within ~1.5s
     } catch (e: any) {
       setErr(e.message ?? String(e));
     } finally {
@@ -151,6 +178,15 @@ function RoomView({ room, onBack }: { room: Room; onBack: () => void }) {
         <button onClick={onBack} style={{ padding: "6px 10px" }}>← Back</button>
         <h2 style={{ margin: 0 }}>{room.name}</h2>
         <span style={{ color: "#666" }}>({room.scenario})</span>
+        <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 8 }}>
+          <label>Live</label>
+          <input
+            type="checkbox"
+            checked={live}
+            onChange={(e) => setLive(e.target.checked)}
+            title="Toggle live polling"
+          />
+        </div>
       </div>
 
       <div style={{ border: "1px solid #ddd", borderRadius: 8, padding: 12, marginBottom: 16 }}>
@@ -207,6 +243,7 @@ function RoomView({ room, onBack }: { room: Room; onBack: () => void }) {
     </div>
   );
 }
+
 
 export default function App() {
   const [open, setOpen] = useState<Room | null>(null);
