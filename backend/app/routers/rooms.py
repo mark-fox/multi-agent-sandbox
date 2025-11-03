@@ -92,6 +92,7 @@ def build_scenario_room(scenario_key: str):
             "agents": session.exec(select(Agent).where(Agent.room_id == room.id)).all(),
             "description": scenario["description"],
         }
+    
 @router.post("/{room_id}/reset")
 def reset_room(room_id: int, wipe: str = Query("messages", enum=["messages", "all"])):
     """
@@ -119,3 +120,34 @@ def reset_room(room_id: int, wipe: str = Query("messages", enum=["messages", "al
                 wiped["memories"] += 1
 
         return {"ok": True, "room_id": room_id, "wiped": wiped}
+    
+@router.delete("/{room_id}")
+def delete_room(room_id: int):
+    """
+    Delete a room and EVERYTHING associated with it:
+    - all messages in the room
+    - all agents in the room
+    - each agent's Chroma memories
+    - the room itself
+    """
+    with Session(engine) as session:
+        room = session.get(Room, room_id)
+        if not room:
+            raise HTTPException(status_code=404, detail="Room not found")
+
+        # Delete messages
+        msgs = session.exec(select(Message).where(Message.room_id == room_id)).all()
+        for m in msgs:
+            session.delete(m)
+
+        # Wipe memories + delete agents
+        agents = session.exec(select(Agent).where(Agent.room_id == room_id)).all()
+        for a in agents:
+            wipe_agent_memories(a.id)
+            session.delete(a)
+
+        # Finally delete the room
+        session.delete(room)
+        session.commit()
+
+        return {"ok": True, "room_id": room_id, "deleted": {"messages": len(msgs), "agents": len(agents)}}

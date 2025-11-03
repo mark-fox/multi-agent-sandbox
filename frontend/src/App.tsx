@@ -57,6 +57,21 @@ function RoomsView({ onOpen }: { onOpen: (room: Room) => void }) {
     }
   }
 
+  async function deleteRoom(roomId: number) {
+    if (
+      !confirm(
+        "Delete this room and ALL related data (agents, messages, memories)?"
+      )
+    )
+      return;
+    try {
+      await api(`/rooms/${roomId}`, { method: "DELETE" });
+      setRooms((r) => r.filter((x) => x.id !== roomId));
+    } catch (e: any) {
+      alert(e.message ?? String(e));
+    }
+  }
+
   return (
     <div style={{ maxWidth: 800, margin: "2rem auto", padding: "0 1rem" }}>
       <h1>Rooms</h1>
@@ -118,17 +133,25 @@ function RoomsView({ onOpen }: { onOpen: (room: Room) => void }) {
         {rooms.map((r) => (
           <li
             key={r.id}
-            onClick={() => onOpen(r)}
             style={{
               border: "1px solid #eee",
               borderRadius: 8,
               padding: 12,
-              cursor: "pointer",
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
             }}
-            title="Open room"
           >
-            <div style={{ fontWeight: 600 }}>{r.name}</div>
-            <div style={{ color: "#666" }}>{r.scenario}</div>
+            <div onClick={() => onOpen(r)} style={{ cursor: "pointer" }}>
+              <div style={{ fontWeight: 600 }}>{r.name}</div>
+              <div style={{ color: "#666" }}>{r.scenario}</div>
+            </div>
+            <button
+              onClick={() => deleteRoom(r.id)}
+              style={{ padding: "6px 10px" }}
+            >
+              Delete
+            </button>
           </li>
         ))}
         {rooms.length === 0 && <li style={{ color: "#666" }}>No rooms yet.</li>}
