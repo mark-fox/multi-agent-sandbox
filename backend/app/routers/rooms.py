@@ -1,10 +1,11 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import Response
 from sqlmodel import Session, select
 from datetime import datetime
 from app.db import engine
 from app.models import Room, RoomCreate, Agent, Message
 from app.scenarios import SCENARIOS
+from app.memory import wipe_agent_memories
 
 router = APIRouter(prefix="/rooms", tags=["rooms"])
 
@@ -91,3 +92,30 @@ def build_scenario_room(scenario_key: str):
             "agents": session.exec(select(Agent).where(Agent.room_id == room.id)).all(),
             "description": scenario["description"],
         }
+@router.post("/{room_id}/reset")
+def reset_room(room_id: int, wipe: str = Query("messages", enum=["messages", "all"])):
+    """
+    Reset a room.
+    - wipe=messages (default): delete all messages
+    - wipe=all: delete all messages AND wipe agent memories (Chroma)
+    """
+    with Session(engine) as session:
+        room = session.get(Room, room_id)
+        if not room:
+            raise HTTPException(status_code=404, detail="Room not found")
+
+        # Delete all messages for this room
+        msgs = session.exec(select(Message).where(Message.room_id == room_id)).all()
+        for m in msgs:
+            session.delete(m)
+        session.commit()
+
+        wiped = {"messages": len(msgs), "memories": 0}
+
+        if wipe == "all":
+            agents = session.exec(select(Agent).where(Agent.room_id == room_id)).all()
+            for a in agents:
+                wipe_agent_memories(a.id)
+                wiped["memories"] += 1
+
+        return {"ok": True, "room_id": room_id, "wiped": wiped}

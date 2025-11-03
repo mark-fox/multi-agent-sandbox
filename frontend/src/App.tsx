@@ -279,6 +279,31 @@ function RoomView({ room, onBack }: { room: Room; onBack: () => void }) {
     }
   }
 
+  async function resetRoom(wipeAll = false) {
+    if (
+      !confirm(
+        wipeAll
+          ? "This will delete ALL messages and wipe agent memories. Continue?"
+          : "This will delete all messages in this room. Continue?"
+      )
+    )
+      return;
+
+    setLoading(true);
+    setErr(null);
+    try {
+      await api(`/rooms/${room.id}/reset${wipeAll ? "?wipe=all" : ""}`, {
+        method: "POST",
+      });
+      // Clear local state; poller would do it anyway, but we make it instant
+      setMessages([]);
+    } catch (e: any) {
+      setErr(e.message ?? String(e));
+    } finally {
+      setLoading(false);
+    }
+  }
+
   return (
     <div style={{ maxWidth: 1000, margin: "2rem auto", padding: "0 1rem" }}>
       <div
@@ -394,6 +419,20 @@ function RoomView({ room, onBack }: { room: Room; onBack: () => void }) {
             style={{ padding: "8px 12px" }}
           >
             Judge
+          </button>
+          <button
+            onClick={() => resetRoom(false)}
+            disabled={loading}
+            style={{ padding: "8px 12px" }}
+          >
+            Reset (msgs)
+          </button>
+          <button
+            onClick={() => resetRoom(true)}
+            disabled={loading}
+            style={{ padding: "8px 12px" }}
+          >
+            Reset All
           </button>
         </div>
         <div

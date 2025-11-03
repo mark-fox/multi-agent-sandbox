@@ -29,3 +29,12 @@ def recall_memories(agent_id: int, query: str, n_results: int = 3) -> list[str]:
         return []
     res = coll.query(query_texts=[query], n_results=n_results)
     return res["documents"][0]
+
+def wipe_agent_memories(agent_id: int):
+    """Delete the Chroma collection for a given agent, if it exists."""
+    name = f"agent_{agent_id}_memories"
+    try:
+        chroma_client.delete_collection(name=name)
+    except Exception:
+        # If it doesn't exist yet, ignore
+        pass
