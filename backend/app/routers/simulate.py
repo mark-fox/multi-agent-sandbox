@@ -7,7 +7,23 @@ from app.memory import add_memory, recall_memories
 
 router = APIRouter(prefix="/simulate", tags=["simulate"])
 
+SHORT_SCENARIOS = {"argument_short", "debate_short"}
+
 SYSTEM_TEMPLATE = "You are {name}, a {role}. Your goal: {goal}. Stay concise and in-character."
+SYSTEM_TEMPLATE_SHORT = (
+    "You are {name}, a {role}. Your goal: {goal}.\n"
+    "Debate the topic directly. Rules:\n"
+    "- One sentence under 18 words.\n"
+    "- Must contain a CLAIM + REASON (no lists, no preambles).\n"
+    "- Address the opponent's last point.\n"
+    "- No insults, no meta commentary.\n"
+)
+
+def extract_topic(messages: list[Message]) -> str | None:
+    for m in messages:
+        if (m.content or "").startswith("TOPIC:"):
+            return m.content.split("TOPIC:", 1)[1].strip() or None
+    return None
 
 @router.post("/turn/{room_id}")
 async def simulate_turn(room_id: int):
@@ -38,27 +54,36 @@ async def simulate_turn(room_id: int):
         ).all()
         history_text = "\n".join([f"{m.agent_id}:{m.content}" for m in history[-12:]])
 
-        # Recall top relevant memories for this agent
+        topic = extract_topic(history)
+        topic_line = f"Debate Topic: {topic}" if topic else "Debate Topic: (not set — argue generally, but avoid ad hominem)."
+
+        # Recall relevant memories
         recalled = recall_memories(next_agent.id, history_text, n_results=3)
         memory_text = "\n".join(recalled) if recalled else "No relevant past memories."
 
-        system = f"You are {next_agent.name}, a {next_agent.role}. Your goal: {next_agent.goal}."
+        # Choose style + generation options
+        short_mode = (room.scenario in SHORT_SCENARIOS)
+        system_tpl = SYSTEM_TEMPLATE_SHORT if short_mode else SYSTEM_TEMPLATE
+        system = system_tpl.format(name=next_agent.name, role=next_agent.role, goal=next_agent.goal)
+
         prompt = (
+            f"{topic_line}\n\n"
             f"Conversation so far:\n{history_text}\n\n"
             f"Relevant past memories:\n{memory_text}\n\n"
             f"Your next reply:"
         )
 
-        reply = await generate_llm(prompt, system=system)
+        # Keep outputs tight in short mode
+        options = {"num_predict": 60, "temperature": 0.9} if short_mode else {"num_predict": 256, "temperature": 0.7}
+
+        reply = await generate_llm(prompt, system=system, options=options)
 
         msg = Message(room_id=room_id, agent_id=next_agent.id, content=reply)
         session.add(msg)
         session.commit()
         session.refresh(msg)
 
-        # Add new message to agent's memory
         add_memory(next_agent.id, reply)
-
         return msg
     
     

@@ -123,6 +123,9 @@ function RoomsView({ onOpen }: { onOpen: (room: Room) => void }) {
             <button onClick={() => buildScenario("story_writing")}>
               Story Writing
             </button>
+            <button onClick={() => buildScenario("argument_short")}>
+              Argument (short)
+            </button>
           </div>
         </div>
 
@@ -161,6 +164,7 @@ function RoomsView({ onOpen }: { onOpen: (room: Room) => void }) {
 }
 
 function RoomView({ room, onBack }: { room: Room; onBack: () => void }) {
+  const [topic, setTopic] = useState("");
   const [agents, setAgents] = useState<Agent[]>([]);
   const [messages, setMessages] = useState<Message[]>([]);
   const [draftAgent, setDraftAgent] = useState<
@@ -219,6 +223,21 @@ function RoomView({ room, onBack }: { room: Room; onBack: () => void }) {
       clearInterval(id);
     };
   }, [room.id, live]);
+
+  async function saveTopic() {
+    const t = topic.trim();
+    if (!t) return;
+    try {
+      await api(`/rooms/${room.id}/topic`, {
+        method: "POST",
+        body: JSON.stringify({ topic: t }),
+      });
+      setTopic("");
+      // poller will bring in the new TOPIC message
+    } catch (e: any) {
+      alert(e.message ?? String(e));
+    }
+  }
 
   async function addAgent() {
     if (!draftAgent.name.trim() || !draftAgent.role.trim()) return;
@@ -362,7 +381,30 @@ function RoomView({ room, onBack }: { room: Room; onBack: () => void }) {
           </button>
         </div>
       </div>
-
+      <div
+        style={{
+          border: "1px solid #ddd",
+          borderRadius: 8,
+          padding: 12,
+          marginBottom: 16,
+        }}
+      >
+        <h3 style={{ marginTop: 0 }}>Debate Topic</h3>
+        <div style={{ display: "flex", gap: 8 }}>
+          <input
+            placeholder="Set topic (e.g., Should we adopt a 4-day workweek?)"
+            value={topic}
+            onChange={(e) => setTopic(e.target.value)}
+            style={{ flex: 1, padding: 8 }}
+          />
+          <button onClick={saveTopic} style={{ padding: "8px 12px" }}>
+            Save
+          </button>
+        </div>
+        <div style={{ marginTop: 8, color: "#666" }}>
+          Tip: Use the Argument (short) scenario for snappy replies.
+        </div>
+      </div>
       <div
         style={{
           border: "1px solid #ddd",

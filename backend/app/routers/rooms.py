@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Body
 from fastapi.responses import Response
 from sqlmodel import Session, select
 from datetime import datetime
@@ -70,11 +70,12 @@ def export_room_markdown(room_id: int):
         return Response(content=md, media_type="text/markdown; charset=utf-8", headers=headers)
     
 @router.post("/build/{scenario_key}")
-def build_scenario_room(scenario_key: str):
-    """Create a new room with predefined agents from a scenario template."""
+def build_scenario_room(scenario_key: str, data: dict = Body(default={})):
     scenario = SCENARIOS.get(scenario_key)
     if not scenario:
         raise HTTPException(status_code=404, detail="Scenario not found")
+
+    topic = (data.get("topic") or "").strip()
 
     with Session(engine) as session:
         room = Room(name=scenario_key.replace("_", " ").title(), scenario=scenario_key)
@@ -83,15 +84,17 @@ def build_scenario_room(scenario_key: str):
         session.refresh(room)
 
         for a in scenario["agents"]:
-            agent = Agent(room_id=room.id, name=a["name"], role=a["role"], goal=a["goal"])
-            session.add(agent)
+            session.add(Agent(room_id=room.id, name=a["name"], role=a["role"], goal=a["goal"]))
         session.commit()
 
-        return {
-            "room": room,
-            "agents": session.exec(select(Agent).where(Agent.room_id == room.id)).all(),
-            "description": scenario["description"],
-        }
+        # Store topic as a system message
+        if topic:
+            session.add(Message(room_id=room.id, agent_id=None, content=f"TOPIC: {topic}"))
+            session.commit()
+
+        agents = session.exec(select(Agent).where(Agent.room_id == room.id)).all()
+        return {"room": room, "agents": agents, "description": scenario["description"], "topic": topic or None}
+
     
 @router.post("/{room_id}/reset")
 def reset_room(room_id: int, wipe: str = Query("messages", enum=["messages", "all"])):
@@ -151,3 +154,30 @@ def delete_room(room_id: int):
         session.commit()
 
         return {"ok": True, "room_id": room_id, "deleted": {"messages": len(msgs), "agents": len(agents)}}
+
+@router.post("/{room_id}/topic")
+def set_room_topic(room_id: int, data: dict = Body(...)):
+    """Set/replace the room's debate topic by storing a system message 'TOPIC: ...'."""
+    topic = (data.get("topic") or "").strip()
+    if not topic:
+        raise HTTPException(status_code=400, detail="Topic cannot be empty")
+
+    with Session(engine) as session:
+        room = session.get(Room, room_id)
+        if not room:
+            raise HTTPException(status_code=404, detail="Room not found")
+
+        # Remove any existing TOPIC message(s)
+        existing = session.exec(
+            select(Message).where(Message.room_id == room_id)
+        ).all()
+        for m in existing:
+            if (m.content or "").startswith("TOPIC:"):
+                session.delete(m)
+
+        # Insert the new TOPIC message
+        msg = Message(room_id=room_id, agent_id=None, content=f"TOPIC: {topic}")
+        session.add(msg)
+        session.commit()
+        session.refresh(msg)
+        return {"ok": True, "topic": topic}

@@ -21,4 +21,11 @@ SCENARIOS = {
             {"name": "Eli", "role": "Editor", "goal": "Improve clarity and coherence."},
         ],
     },
+    "argument_short": {
+        "description": "Two people in a heated argument. Very short, blunt replies.",
+        "agents": [
+            {"name": "Riley", "role": "Arguer A", "goal": "Win the argument with blunt, snappy points."},
+            {"name": "Jordan", "role": "Arguer B", "goal": "Shut down A's points with sharp rebuttals."},
+        ],
+    },
 }
