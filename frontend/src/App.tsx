@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { api, API_BASE } from "./lib/api";
 import type { Room, Agent, Message } from "./types";
 
@@ -346,6 +346,15 @@ function RoomView({ room, onBack }: { room: Room; onBack: () => void }) {
     }
   }
 
+  const currentTopic = useMemo(() => {
+    // Look backwards for the most recent TOPIC message
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const c = messages[i]?.content || "";
+      if (c.startsWith("TOPIC:")) return c.slice(6).trim();
+    }
+    return null;
+  }, [messages]);
+
   return (
     <div style={{ maxWidth: 1000, margin: "2rem auto", padding: "0 1rem" }}>
       <div
@@ -390,6 +399,17 @@ function RoomView({ room, onBack }: { room: Room; onBack: () => void }) {
         }}
       >
         <h3 style={{ marginTop: 0 }}>Debate Topic</h3>
+        {currentTopic ? (
+          <div style={{ marginBottom: 8, fontSize: 14 }}>
+            <span style={{ opacity: 0.8 }}>Current topic:</span>{" "}
+            <strong>{currentTopic}</strong>
+          </div>
+        ) : (
+          <div style={{ marginBottom: 8, fontSize: 14, color: "#666" }}>
+            No topic set yet.
+          </div>
+        )}
+
         <div style={{ display: "flex", gap: 8 }}>
           <input
             placeholder="Set topic (e.g., Should we adopt a 4-day workweek?)"
